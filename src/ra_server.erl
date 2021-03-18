@@ -732,8 +732,9 @@ handle_candidate(#request_vote_result{term = Term, vote_granted = true},
     NewVotes = Votes + 1,
     case trunc(maps:size(Nodes) / 2) + 1 of
         NewVotes ->
+            Time = os:system_time(millisecond),
             {State1, Effects} = make_all_rpcs(initialise_peers(State0)),
-            Noop = {noop, #{ts => os:system_time(millisecond)},
+            Noop = {noop, #{ts => Time},
                     ra_machine:version(Mac)},
             State = State1#{leader_id => Id},
             {leader, maps:without([votes], State),

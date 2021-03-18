@@ -14,6 +14,7 @@
          start/0,
          start/1,
          start_in/1,
+         listen_for_instructions/0,
          %% command execution
          process_command/2,
          process_command/3,
@@ -336,6 +337,7 @@ start_cluster(ServerConfigs) ->
     {error, cluster_not_formed}.
 start_cluster([#{cluster_name := ClusterName} | _] =
                ServerConfigs, Timeout) ->
+    ?TIMER_NODE ! {start, os:system_time(millisecond)},
     {Started, NotStarted} =
         ra_lib:partition_parallel(
             fun (C) ->
@@ -928,6 +930,31 @@ register_external_log_reader({_, Node} = ServerId)
     ra_log_reader:init(UId, Idx, 1, SegRefs).
 
 %% internal
+
+listen_for_instructions() ->
+    receive 
+        {initialise_cluster, Nodes, ClusterName} ->
+            ?NOTICE("INSTRUCTOR: received initialise_cluster", []),
+            ServerIds = [{ClusterName, N} || N <- Nodes],
+            start_cluster(ClusterName, {simple, fun erlang:'+'/2, 0}, ServerIds),
+            listen_for_instructions();
+        {destroy_cluster, Nodes, ClusterName} ->
+            ?NOTICE("INSTRUCTOR: received destroy_cluster", []),
+            ServerIds = [{ClusterName, N} || N <- Nodes],
+            {Msg, Reason} = delete_cluster(ServerIds),
+            % timer:sleep(1000),
+            ?TIMER_NODE ! {Msg, Reason},
+            listen_for_instructions();
+        {kill_leader, Nodes, ClusterName} -> 
+            ?NOTICE("INSTRUCTOR: received kill_leader", []),
+            {ok, _, LeaderId} = process_command({ClusterName, hd(Nodes)}, 0),
+            force_delete_server(LeaderId),
+            listen_for_instructions();
+        _ -> 
+            ?NOTICE("INSTRUCTOR: unkown instruciton", []),
+            listen_for_instructions()
+    end.
+
 
 usr(Data, Mode) ->
     {'$usr', Data, Mode}.

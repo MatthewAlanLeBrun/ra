@@ -322,6 +322,8 @@ recovered(internal, next, #state{server_state = ServerState} = State) ->
     next_state(follower, State, set_tick_timer(State, [])).
 
 leader(enter, OldState, State0) ->
+    Time = os:system_time(millisecond),
+    ?TIMER_NODE ! {elected, Time},
     {State, Actions} = handle_enter(?FUNCTION_NAME, OldState, State0),
     ok = record_leader_change(id(State0), State0),
     {keep_state, State#state{leader_last_seen = undefined,
@@ -1259,21 +1261,24 @@ process_pending_queries(NewLeader,
      || F <- Froms],
     State#state{server_state = ServerState}.
 
-election_timeout_action(Length, #state{conf = Conf}) ->
-    election_timeout_action(Length, Conf);
-election_timeout_action(really_short, #conf{broadcast_time = Timeout}) ->
-    T = rand:uniform(Timeout),
-    {state_timeout, T, election_timeout};
-election_timeout_action(short, #conf{broadcast_time = Timeout}) ->
-    T = rand:uniform(Timeout * ?DEFAULT_ELECTION_MULT) + Timeout,
-    {state_timeout, T, election_timeout};
-election_timeout_action(long, #conf{broadcast_time = Timeout,
-                                    aten_poll_interval = Poll}) ->
+election_timeout_action(_, _) ->
+    T = rand:uniform(12) + 12,
+    {state_timeout, T, election_timeout}.
+%election_timeout_action(Length, #state{conf = Conf}) ->
+%    election_timeout_action(Length, Conf);
+%election_timeout_action(really_short, #conf{broadcast_time = Timeout}) ->
+%    T = rand:uniform(Timeout),
+%    {state_timeout, T, election_timeout};
+%election_timeout_action(short, #conf{broadcast_time = Timeout}) ->
+%    T = rand:uniform(Timeout * ?DEFAULT_ELECTION_MULT) + Timeout,
+%    {state_timeout, T, election_timeout};
+%election_timeout_action(long, #conf{broadcast_time = Timeout,
+%                                    aten_poll_interval = Poll}) ->
     %% this should be longer than aten detection poll interval so that
     %% there is a chance a false positive from aten can be reversed without
     %% triggering elections
-    T = rand:uniform(Timeout * ?DEFAULT_ELECTION_MULT * 2) + Poll,
-    {state_timeout, T, election_timeout}.
+%    T = rand:uniform(Timeout * ?DEFAULT_ELECTION_MULT * 2) + Poll,
+%    {state_timeout, T, election_timeout}.
 
 % sets the tick timer for periodic actions such as sending rpcs to servers
 % that are stale to ensure liveness
