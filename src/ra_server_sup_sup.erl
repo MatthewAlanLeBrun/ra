@@ -104,8 +104,8 @@ stop_server({RaName, Node}) ->
         undefined ->
           ok;
         _ when is_pid(Pid) ->
-          ?TIMER_NODE ! {killed_leader, os:system_time(millisecond)},
-          supervisor:terminate_child({?MODULE, Node}, Pid);
+            ?COORDINATOR ! {killed_leader, os:system_time(millisecond)},
+            supervisor:terminate_child({?MODULE, Node}, Pid);
         Err ->
         {error, Err}
     end;

@@ -14,7 +14,8 @@
          start/0,
          start/1,
          start_in/1,
-         listen_for_instructions/0,
+         start_coordinator/0,
+         coordinator/0,
          %% command execution
          process_command/2,
          process_command/3,
@@ -73,6 +74,7 @@
         ]).
 
 -define(START_TIMEOUT, ?DEFAULT_TIMEOUT).
+-define(TIMER_NODE, {timer, 'timer@192.168.0.232'}).
 
 -type ra_cmd_ret() :: ra_server_proc:ra_cmd_ret().
 
@@ -337,7 +339,7 @@ start_cluster(ServerConfigs) ->
     {error, cluster_not_formed}.
 start_cluster([#{cluster_name := ClusterName} | _] =
                ServerConfigs, Timeout) ->
-    ?TIMER_NODE ! {start, os:system_time(millisecond)},
+    ?COORDINATOR ! {start, os:system_time(millisecond)},
     {Started, NotStarted} =
         ra_lib:partition_parallel(
             fun (C) ->
@@ -931,30 +933,49 @@ register_external_log_reader({_, Node} = ServerId)
 
 %% internal
 
-listen_for_instructions() ->
+start_coordinator() ->
+    io:fwrite("Starting coordinator..."),
+    register(coordinator, spawn(fun coordinator/0)).
+
+coordinator() ->
     receive 
         {initialise_cluster, Nodes, ClusterName} ->
-            ?NOTICE("INSTRUCTOR: received initialise_cluster", []),
+            io:fwrite("INSTRUCTOR: received initialise_cluster \n"),
             ServerIds = [{ClusterName, N} || N <- Nodes],
             start_cluster(ClusterName, {simple, fun erlang:'+'/2, 0}, ServerIds),
-            listen_for_instructions();
+            coordinator();
         {destroy_cluster, Nodes, ClusterName} ->
-            ?NOTICE("INSTRUCTOR: received destroy_cluster", []),
+            io:fwrite("INSTRUCTOR: received destroy_cluster\n"),
             ServerIds = [{ClusterName, N} || N <- Nodes],
             {Msg, Reason} = delete_cluster(ServerIds),
-            % timer:sleep(1000),
+            os:cmd("rm -rf ra*@*.*.*.*"),
             ?TIMER_NODE ! {Msg, Reason},
-            listen_for_instructions();
+            coordinator();
         {kill_leader, Nodes, ClusterName} -> 
-            ?NOTICE("INSTRUCTOR: received kill_leader", []),
+            io:fwrite("INSTRUCTOR: received kill_leader\n"),
             {ok, _, LeaderId} = process_command({ClusterName, hd(Nodes)}, 0),
             force_delete_server(LeaderId),
-            listen_for_instructions();
+            coordinator();
+        {start, T1} ->
+            io:fwrite("INSTRUCTOR: Received start, waiting for elected...\n"),
+            receive 
+                {elected, T2} ->
+                    io:fwrite("INSTRUCTOR: Received elected, waiting for elected...\n"),
+                    ?TIMER_NODE ! {startup, T2 - T1}
+            end,
+            coordinator();
+        {killed_leader, T1} ->
+            io:fwrite("INSTRUCTOR: Received killed_leader, waiting for elected...\n"),
+            receive 
+                {elected, T2} ->
+                    io:fwrite("INSTRUCTOR: Received elected, waiting for elected...\n"),
+                    ?TIMER_NODE ! {new_leader, T2 - T1}
+            end,
+            coordinator();
         _ -> 
-            ?NOTICE("INSTRUCTOR: unkown instruciton", []),
-            listen_for_instructions()
+            io:fwrite("INSTRUCTOR: unkown instruciton\n"),
+            coordinator()
     end.
-
 
 usr(Data, Mode) ->
     {'$usr', Data, Mode}.

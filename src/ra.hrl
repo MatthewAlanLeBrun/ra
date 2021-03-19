@@ -259,5 +259,4 @@
          ]).
 
 -define(RA_COUNTER_FIELDS, ?RA_LOG_COUNTER_FIELDS ++ ?RA_SRV_COUNTER_FIELDS).
-
--define(TIMER_NODE, {timer, 'timer@192.168.0.188'}).
+-define(COORDINATOR, coordinator).

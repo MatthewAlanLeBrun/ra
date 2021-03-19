@@ -323,7 +323,7 @@ recovered(internal, next, #state{server_state = ServerState} = State) ->
 
 leader(enter, OldState, State0) ->
     Time = os:system_time(millisecond),
-    ?TIMER_NODE ! {elected, Time},
+    ?COORDINATOR ! {elected, Time},
     {State, Actions} = handle_enter(?FUNCTION_NAME, OldState, State0),
     ok = record_leader_change(id(State0), State0),
     {keep_state, State#state{leader_last_seen = undefined,
